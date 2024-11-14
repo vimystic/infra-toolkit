@@ -1,20 +1,21 @@
-FROM --platform=$BUILDPLATFORM alpine:3 AS build-env
+FROM alpine:3
 
-RUN apk add --update --no-cache \
-  automake \
-  autoconf \
-  bash \
-  bison \
+RUN apk add --no-cache \
   curl \
-  eudev-dev \
-  flex \
-  gcc \
-  git \
-  libc-dev \
-  libtool \
-  linux-headers \
-  make \
-  wget
+  lz4 \
+  nano \
+  npm \
+  rsync \
+  tar \
+  wget \
+  zstd-dev \
+  python3 \
+  py3-pip \
+  tmux \
+  vim
+
+# Install gsutil
+RUN pip3 install gsutil
 
 ARG TARGETARCH
 ARG BUILDARCH
