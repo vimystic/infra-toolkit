@@ -14,6 +14,7 @@ RUN apk add --update --no-cache \
   libtool \
   linux-headers \
   make \
+  vim \
   wget
 
 ARG TARGETARCH
