@@ -1,21 +1,20 @@
-FROM alpine:3
+FROM alpine:3 AS build-env
 
-RUN apk add --no-cache \
+RUN apk add --update --no-cache \
+  automake \
+  autoconf \
+  bash \
+  bison \
   curl \
-  lz4 \
-  nano \
-  npm \
-  rsync \
-  tar \
-  wget \
-  zstd-dev \
-  python3 \
-  py3-pip \
-  tmux \
-  vim
-
-# Install gsutil
-RUN pip3 install gsutil
+  eudev-dev \
+  flex \
+  gcc \
+  git \
+  libc-dev \
+  libtool \
+  linux-headers \
+  make \
+  wget
 
 ARG TARGETARCH
 ARG BUILDARCH
@@ -39,10 +38,9 @@ RUN LIBDIR=/lib; \
 
 # Build minimal busybox
 WORKDIR /
-# busybox v1.34.1 stable
 RUN git clone -b 1_34_1 --single-branch https://git.busybox.net/busybox
 WORKDIR /busybox
-ADD busybox.min.config .config
+COPY busybox.min.config .config
 RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "arm64" ]; then \
       export CC=aarch64-linux-musl-gcc; \
     elif [ "${TARGETARCH}" = "amd64" ] && [ "${BUILDARCH}" != "amd64" ]; then \
@@ -70,7 +68,20 @@ RUN apk add --no-cache \
   rsync \
   tar \
   wget \
-  zstd-dev
+  zstd-dev \
+  python3 \
+  py3-pip \
+  tmux \
+  vim \
+  python3-dev
+
+# Create and activate a virtual environment
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install gsutil in the virtual environment
+RUN /opt/venv/bin/pip3 install --upgrade pip && \
+    /opt/venv/bin/pip3 install gsutil
 
 # Install busybox
 COPY --from=build-env /busybox/busybox /busybox/busybox
@@ -83,11 +94,7 @@ COPY --from=config-merge /usr/local/config-merge /usr/local/config-merge
 COPY --from=config-merge /usr/local/bin/config-merge /usr/local/bin/config-merge
 COPY --from=config-merge /usr/local/bin/envsubst /usr/local/bin/envsubst
 
-# Add dasel.
-# The dasel repository does not post checksums of the published binaries,
-# so use hardcoded binaries in order to avoid potential supply chain attacks.
-# Note, dasel does publish docker images, but only for amd64,
-# so we cannot copy the binary out like we do for config-merge.
+# Add dasel
 RUN if [ "$(uname -m)" = "aarch64" ]; then \
       ARCH=arm64 DASELSUM="8e1f95b5f361f68ed8376d5a9593ae4249e28153a05b26f1f99f9466efeac5c9  /usr/local/bin/dasel"; \
     else \
@@ -96,3 +103,9 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
     wget -O /usr/local/bin/dasel https://github.com/TomWright/dasel/releases/download/v1.26.0/dasel_linux_$ARCH && \
       sha256sum -c <(echo "$DASELSUM") && \
       chmod +x /usr/local/bin/dasel
+
+# Set the working directory
+WORKDIR /app
+
+# Set the entrypoint
+ENTRYPOINT ["/bin/sh"]
