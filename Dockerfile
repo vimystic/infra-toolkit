@@ -68,25 +68,34 @@ RUN apk add --no-cache \
   py3-pip \
   tmux \
   vim \
-  python3-dev
+  python3-dev \
+  sudo
 
-# Create operator user and group
+# Create operator user and group, and set up sudo
 RUN addgroup -g 1000 operator && \
-    adduser -D -u 1000 -G operator operator
+    adduser -D -u 1000 -G operator operator && \
+    echo "operator ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/operator && \
+    chmod 0440 /etc/sudoers.d/operator
 
 # Create and activate a virtual environment
 RUN python3 -m venv /opt/venv && \
-    chown -R operator:operator /opt/venv
+    chown -R operator:operator /opt/venv && \
+    chmod -R 755 /opt/venv/bin  # Ensure executables are runnable
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install gsutil as operator user
+# Install gsutil and fix permissions
 USER operator
 RUN /opt/venv/bin/pip3 install --upgrade pip && \
     /opt/venv/bin/pip3 install gsutil
 
-# Switch back to root for remaining installations
+# Make sure all files in venv are owned by operator
 USER root
+RUN chown -R operator:operator /opt/venv && \
+    chmod -R 755 /opt/venv/bin
+
+# Switch back to operator for the remaining operations
+USER operator
 
 # Install busybox
 COPY --from=build-env /busybox/busybox /busybox/busybox
@@ -98,6 +107,9 @@ COPY --from=build-env /jq/jq /usr/local/bin/jq
 COPY --from=config-merge /usr/local/config-merge /usr/local/config-merge
 COPY --from=config-merge /usr/local/bin/config-merge /usr/local/bin/config-merge
 COPY --from=config-merge /usr/local/bin/envsubst /usr/local/bin/envsubst
+
+# Switch to root for dasel installation
+USER root
 
 # Add dasel
 RUN if [ "$(uname -m)" = "aarch64" ]; then \
