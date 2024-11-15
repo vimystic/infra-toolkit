@@ -1,5 +1,4 @@
 FROM alpine:3 AS build-env
-
 RUN apk add --update --no-cache \
   automake \
   autoconf \
@@ -16,10 +15,8 @@ RUN apk add --update --no-cache \
   make \
   vim \
   wget
-
 ARG TARGETARCH
 ARG BUILDARCH
-
 RUN LIBDIR=/lib; \
     if [ "${TARGETARCH}" = "arm64" ]; then \
       ARCH=aarch64; \
@@ -36,7 +33,6 @@ RUN LIBDIR=/lib; \
         mkdir -p $LIBDIR; \
       fi; \
     fi;
-
 # Build minimal busybox
 WORKDIR /
 RUN git clone -b 1_34_1 --single-branch https://git.busybox.net/busybox
@@ -48,7 +44,6 @@ RUN if [ "${TARGETARCH}" = "arm64" ] && [ "${BUILDARCH}" != "arm64" ]; then \
       export CC=x86_64-linux-musl-gcc; \
     fi; \
     make
-
 # Static jq
 WORKDIR /
 RUN git clone --recursive -b jq-1.6 --single-branch https://github.com/stedolan/jq.git
@@ -60,7 +55,6 @@ RUN autoreconf -fi;\
 FROM boxboat/config-merge:0.2.1 as config-merge
 
 FROM alpine:3
-
 RUN apk add --no-cache \
   curl \
   lz4 \
@@ -76,13 +70,23 @@ RUN apk add --no-cache \
   vim \
   python3-dev
 
+# Create operator user and group
+RUN addgroup -g 1000 operator && \
+    adduser -D -u 1000 -G operator operator
+
 # Create and activate a virtual environment
-RUN python3 -m venv /opt/venv
+RUN python3 -m venv /opt/venv && \
+    chown -R operator:operator /opt/venv
+
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade pip and install gsutil in the virtual environment
+# Install gsutil as operator user
+USER operator
 RUN /opt/venv/bin/pip3 install --upgrade pip && \
     /opt/venv/bin/pip3 install gsutil
+
+# Switch back to root for remaining installations
+USER root
 
 # Install busybox
 COPY --from=build-env /busybox/busybox /busybox/busybox
@@ -105,8 +109,11 @@ RUN if [ "$(uname -m)" = "aarch64" ]; then \
       sha256sum -c <(echo "$DASELSUM") && \
       chmod +x /usr/local/bin/dasel
 
-# Set the working directory
-WORKDIR /app
+# Set ownership of working directory and home directory
+RUN mkdir -p /app && chown operator:operator /app && \
+    mkdir -p /home/operator && chown -R operator:operator /home/operator
 
-# Set the entrypoint
+# Switch to operator user at the end
+USER operator
+WORKDIR /app
 ENTRYPOINT ["/bin/sh"]
