@@ -77,17 +77,27 @@ RUN addgroup -g 1000 operator && \
     echo "operator ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/operator && \
     chmod 0440 /etc/sudoers.d/operator
 
+# Install gcloud
+RUN apk add --no-cache python3 curl bash && \
+    curl -O https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-453.0.0-linux-x86_64.tar.gz && \
+    tar -xf google-cloud-cli-453.0.0-linux-x86_64.tar.gz && \
+    ./google-cloud-sdk/install.sh --quiet --path-update=true --usage-reporting=false --additional-components beta gsutil && \
+    rm -f google-cloud-cli-453.0.0-linux-x86_64.tar.gz && \
+    ln -s /google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud && \
+    ln -s /google-cloud-sdk/bin/gsutil /usr/local/bin/gsutil && \
+    chown -R operator:operator /google-cloud-sdk
+
 # Create and activate a virtual environment
 RUN python3 -m venv /opt/venv && \
     chown -R operator:operator /opt/venv && \
     chmod -R 755 /opt/venv/bin  # Ensure executables are runnable
 
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PATH="/opt/venv/bin:/google-cloud-sdk/bin:$PATH"
 
 # Install gsutil and fix permissions
 USER operator
 RUN /opt/venv/bin/pip3 install --upgrade pip && \
-    /opt/venv/bin/pip3 install gsutil
+    /opt/venv/bin/pip3 install gsutil google-cloud-storage
 
 # Make sure all files in venv are owned by operator
 USER root
